@@ -561,6 +561,18 @@
     letter-spacing: 0.25em;
     color: var(--ink-light);
   }
+  .closing-fireworks {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0;
+    transition: opacity 1.2s ease;
+  }
+  .closing.fx-on .closing-fireworks { opacity: 1; }
+  .closing > div { position: relative; z-index: 2; }
 
   /* ═════════════════ GATE OVERLAY ═════════════════ */
   .gate {
@@ -1322,7 +1334,7 @@
         <span class="line"></span>
       </div>
       <div class="happy reveal d1">Happy</div>
-      <div class="birthday reveal d2">Birthday,</div>
+      <div class="birthday reveal d2">Birthday</div>
       <div class="dedication reveal d3">致 小 满</div>
       <div class="underline reveal d4"></div>
       <div class="date reveal d5">25 · May</div>
@@ -2270,11 +2282,12 @@
   </section>
 
   <section class="slide closing" id="s9">
+    <canvas class="closing-fireworks" aria-hidden="true"></canvas>
     <span class="corner-label reveal">Finale · 终 章</span>
     <span class="page-num reveal">10 / 10</span>
 
     <div class="happy-cn reveal d1">生日快乐</div>
-    <div class="happy-en reveal d2">— Happy Birthday, my little fullness —</div>
+    <div class="happy-en reveal d2">— Happy Birthday —</div>
     <div class="divider reveal d3"></div>
     <div class="blessing reveal d4">愿 万 事 胜 意 · 长 长 久 久</div>
     <div class="blessing reveal d5" style="margin-top:1vh; font-style:italic; font-family:var(--display); letter-spacing:.15em; font-size: 16px;">may every small fullness become its own joy.</div>
@@ -3224,6 +3237,239 @@
         e.preventDefault();
         e.stopPropagation();
         cake.classList.toggle('blown');
+      }
+    });
+  })();
+
+  /* ───── closing · fireworks ───── */
+  (() => {
+    const slide  = document.getElementById('s9');
+    if (!slide) return;
+    const canvas = slide.querySelector('.closing-fireworks');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    /* warm restrained palette — paired core / halo */
+    const palette = [
+      ['#D85A3C', '#F2B89C'],  // coral
+      ['#A83A22', '#E07A5A'],  // deep coral
+      ['#E6B870', '#F6DDA8'],  // warm gold
+      ['#C99450', '#F0CC8A'],  // amber
+      ['#7A8A5C', '#B5C495'],  // sage
+      ['#F2EAD8', '#FBF4E2'],  // cream
+    ];
+
+    let DPR = 1, W = 0, H = 0;
+    function resize() {
+      DPR = Math.min(window.devicePixelRatio || 1, 2);
+      const r = canvas.getBoundingClientRect();
+      W = Math.max(1, r.width);
+      H = Math.max(1, r.height);
+      canvas.width  = Math.round(W * DPR);
+      canvas.height = Math.round(H * DPR);
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    }
+    window.addEventListener('resize', resize);
+
+    const rockets   = [];
+    const particles = [];
+
+    class Rocket {
+      constructor() {
+        this.x = W * (0.15 + Math.random() * 0.7);
+        this.y = H + 8;
+        this.vx = (Math.random() - 0.5) * 0.4;
+        this.vy = -(9.2 + Math.random() * 2.6);
+        this.targetY = H * (0.06 + Math.random() * 0.18);
+        this.pair = palette[Math.floor(Math.random() * palette.length)];
+        this.trail = [];
+        this.dead = false;
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += 0.075;
+        this.trail.push({ x: this.x, y: this.y, a: 0.55 });
+        if (this.trail.length > 14) this.trail.shift();
+        for (const t of this.trail) t.a *= 0.88;
+        if (this.vy >= -1.0 || this.y <= this.targetY) {
+          this.burst();
+          this.dead = true;
+        }
+      }
+      burst() {
+        const count = 78 + Math.floor(Math.random() * 30);
+        const [core, halo] = this.pair;
+        const style = Math.random();
+        for (let i = 0; i < count; i++) {
+          const ang = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.18;
+          let speed;
+          if (style < 0.45) {
+            speed = 4.0 + Math.random() * 0.8;          // tight ring
+          } else if (style < 0.8) {
+            speed = 1.8 + Math.random() * 4.2;          // organic puff
+          } else {
+            speed = 2.8 + Math.random() * 3.4;
+            if (i % 2 === 0) speed *= 0.55;             // double-shell
+          }
+          particles.push(new Particle(
+            this.x, this.y,
+            Math.cos(ang) * speed,
+            Math.sin(ang) * speed,
+            Math.random() < 0.55 ? core : halo
+          ));
+        }
+        /* a faint center flash */
+        for (let i = 0; i < 8; i++) {
+          particles.push(new Particle(
+            this.x, this.y,
+            (Math.random() - 0.5) * 0.6,
+            (Math.random() - 0.5) * 0.6,
+            halo, 0.9, 30
+          ));
+        }
+      }
+      render() {
+        for (const t of this.trail) {
+          ctx.globalAlpha = t.a;
+          ctx.fillStyle = this.pair[1];
+          ctx.beginPath();
+          ctx.arc(t.x, t.y, 1.3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = this.pair[1];
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    class Particle {
+      constructor(x, y, vx, vy, color, alpha, life) {
+        this.x = x; this.y = y;
+        this.vx = vx; this.vy = vy;
+        this.color = color;
+        this.alpha = alpha != null ? alpha : (0.85 + Math.random() * 0.15);
+        this.life  = life != null ? life  : (105 + Math.random() * 55);
+        this.age = 0;
+        this.r = 2.0 + Math.random() * 1.0;
+        this.shimmer = 0.4 + Math.random() * 0.6;
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vx *= 0.965;
+        this.vy *= 0.965;
+        this.vy += 0.035;
+        this.age++;
+      }
+      render() {
+        const t = this.age / this.life;
+        if (t >= 1) return;
+        const fade = (1 - t);
+        const flicker = 0.78 + Math.sin(this.age * 0.32) * 0.22 * this.shimmer;
+        /* soft halo */
+        ctx.globalAlpha = this.alpha * fade * 0.32 * flicker;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r * 3.8, 0, Math.PI * 2);
+        ctx.fill();
+        /* mid */
+        ctx.globalAlpha = this.alpha * fade * 0.6 * flicker;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r * 1.9, 0, Math.PI * 2);
+        ctx.fill();
+        /* core */
+        ctx.globalAlpha = this.alpha * fade;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      get done() { return this.age >= this.life; }
+    }
+
+    let running = false;
+    let rafId = null;
+    let launchTimer = null;
+
+    function frame() {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'lighter';
+
+      for (let i = rockets.length - 1; i >= 0; i--) {
+        rockets[i].update();
+        rockets[i].render();
+        if (rockets[i].dead) rockets.splice(i, 1);
+      }
+      for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        particles[i].render();
+        if (particles[i].done) particles.splice(i, 1);
+      }
+
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+      if (running) rafId = requestAnimationFrame(frame);
+    }
+
+    function scheduleLaunch() {
+      if (!running) return;
+      rockets.push(new Rocket());
+      if (Math.random() < 0.35) {
+        setTimeout(() => { if (running) rockets.push(new Rocket()); }, 280 + Math.random() * 220);
+      }
+      launchTimer = setTimeout(scheduleLaunch, 1500 + Math.random() * 1400);
+    }
+
+    function start() {
+      if (running) return;
+      resize();
+      running = true;
+      slide.classList.add('fx-on');
+      if (reduced) {
+        /* a single ceremonial burst, then idle */
+        rockets.push(new Rocket());
+        rafId = requestAnimationFrame(frame);
+        return;
+      }
+      setTimeout(() => { if (running) rockets.push(new Rocket()); }, 220);
+      setTimeout(() => { if (running) rockets.push(new Rocket()); }, 1000);
+      rafId = requestAnimationFrame(frame);
+      launchTimer = setTimeout(scheduleLaunch, 1900);
+    }
+
+    function stop() {
+      if (!running) return;
+      running = false;
+      slide.classList.remove('fx-on');
+      if (rafId) cancelAnimationFrame(rafId);
+      if (launchTimer) clearTimeout(launchTimer);
+      rafId = null;
+      launchTimer = null;
+      rockets.length = 0;
+      particles.length = 0;
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+    }
+
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(en => {
+        if (en.isIntersecting) start();
+        else stop();
+      });
+    }, { threshold: 0.35 });
+    io.observe(slide);
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stop();
+      else {
+        const r = slide.getBoundingClientRect();
+        if (r.top < window.innerHeight * 0.65 && r.bottom > window.innerHeight * 0.35) start();
       }
     });
   })();
